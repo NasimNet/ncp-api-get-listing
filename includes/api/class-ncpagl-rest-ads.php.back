@@ -1,0 +1,169 @@
+<?php
+/**
+ * REST ADs Class
+ *
+ * @package Includes/API
+ * @since 1.0.0
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * NCPAGL_REST_Ads
+ *
+ * @package Includes/API
+ * @version  1.0.0
+ */
+class NCPAGL_REST_ADS extends WP_REST_Controller {
+
+	/**
+	 * Endpoint namespace.
+	 *
+	 * @var string
+	 */
+	protected $namespace = 'ncpagl/v1';
+
+	/**
+	 * Route base.
+	 *
+	 * @var string
+	 */
+	protected $rest_base = 'ads';
+
+	/**
+	 * Post type.
+	 *
+	 * @var string
+	 */
+	protected $post_type = 'ad_listing';
+
+	/**
+	 * Register the routes for the objects of the controller.
+	 */
+	public function register_routes() {
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base,
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_items' ),
+					'permission_callback' => array( $this, 'get_item_permissions_check' ),
+					'args'                => array(
+						'context' => array( 'default' => 'view' ),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Get one item from the collection
+	 *
+	 * @param WP_REST_Request $request Full data about the request.
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function get_items( $request ) {
+		$defaults = array(
+			'post_type'           => APP_POST_TYPE,
+			'post_status'         => 'publish',
+			'posts_per_page'      => get_option( 'posts_per_page' ),
+			'ignore_sticky_posts' => 1,
+		);
+
+		$data = $this->prepare_item_for_response( $defaults, $request );
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Check if a given request has access to get a specific item
+	 *
+	 * @param WP_REST_Request $request Full data about the request.
+	 * @return WP_Error|bool
+	 */
+	public function get_item_permissions_check( $request ) {
+
+		// if ( ncpra_rest_check_post_permissions( $this->post_type, 'read' ) ) {
+		// 	return new WP_Error( 'ncpra_rest_cannot_view', __( 'Sorry, you cannot list resources.', 'ncp-rest-api' ), array( 'status' => rest_authorization_required_code() ) );
+		// }
+
+		return true;
+	}
+
+	/**
+	 * Prepare the item for the REST response
+	 *
+	 * @param array  $defaults Defaults.
+	 * @param object $request $_GET.
+	 * @return mixed
+	 */
+	public function prepare_item_for_response( $defaults, $request ) {
+		$params = $request->get_params();
+		$data   = array();
+
+		$args = array(
+			'post_type'           => 'ad_listing',
+			'post_status'         => 'publish',
+			'ignore_sticky_posts' => true,
+			'order'               => 'ASC',
+			'orderby'             => 'date',
+			'meta_query'          => array(
+				array(
+					'key'     => 'cp_mobile',
+					'compare' => 'EXISTS',
+				),
+			),
+		);
+
+		if ( ! empty( $params['per_page'] ) ) {
+			$args['posts_per_page'] = absint( $params['per_page'] );
+		}
+
+		if ( ! empty( $params['paged'] ) ) {
+			$args['paged'] = absint( $params['paged'] );
+		}
+
+		$the_query = new WP_Query( $args );
+		if ( $the_query->have_posts() ) :
+			while ( $the_query->have_posts() ) :
+				$the_query->the_post();
+
+				$data[] = array(
+					'id' => get_the_ID(),
+				);
+
+			endwhile;
+		endif;
+		wp_reset_postdata();
+
+		return $data;
+
+	}
+
+	/**
+	 * Get the query params for collections
+	 *
+	 * @return array
+	 */
+	public function get_collection_params() {
+		return array(
+			'order'   => array(
+				'description'       => 'Order',
+				'type'              => 'string',
+				'sanitize_callback' => 'rest_validate_request_arg',
+			),
+			'orderby' => array(
+				'description'       => 'OrderBy',
+				'type'              => 'string',
+				'sanitize_callback' => 'rest_validate_request_arg',
+			),
+			's'       => array(
+				'description'       => 'Search Keywords',
+				'type'              => 'string',
+				'sanitize_callback' => 'rest_validate_request_arg',
+			),
+		);
+	}
+}
