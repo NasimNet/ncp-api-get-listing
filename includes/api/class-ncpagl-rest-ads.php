@@ -68,7 +68,6 @@ class NCPAGL_REST_ADS extends WP_REST_Controller {
 	public function get_items( $request ) {
 		$params  = $request->get_params();
 		$post_id = absint( $params['pid'] );
-		error_log( print_r( $post_id, true ) );
 
 		if ( $post_id ) {
 			$data = $this->prepare_item_for_response( $post_id, $params );
@@ -135,10 +134,10 @@ class NCPAGL_REST_ADS extends WP_REST_Controller {
 					WHERE p.post_type = 'ad_listing'
 					AND p.post_status = 'publish'
 					AND p.ID != %d
-					AND p.ID < %d
+					AND p.ID > %d
 					AND pm.meta_key = 'cp_mobile'
 					AND pm.meta_value != ''
-					ORDER BY p.ID DESC
+					ORDER BY p.ID ASC
 					LIMIT 5
 				",
 				$post_id,
@@ -157,22 +156,6 @@ class NCPAGL_REST_ADS extends WP_REST_Controller {
 	 * @return array
 	 */
 	public function get_collection_params() {
-		return array(
-			'order'   => array(
-				'description'       => 'Order',
-				'type'              => 'string',
-				'sanitize_callback' => 'rest_validate_request_arg',
-			),
-			'orderby' => array(
-				'description'       => 'OrderBy',
-				'type'              => 'string',
-				'sanitize_callback' => 'rest_validate_request_arg',
-			),
-			's'       => array(
-				'description'       => 'Search Keywords',
-				'type'              => 'string',
-				'sanitize_callback' => 'rest_validate_request_arg',
-			),
-		);
+		return array();
 	}
 }

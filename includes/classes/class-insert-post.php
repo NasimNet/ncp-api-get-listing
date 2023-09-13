@@ -25,6 +25,12 @@ class Insert_Post {
 	private $category = false;
 
 	/**
+	 * Post Featuer images url
+	 *
+	 * @var string Url
+	 */
+	private $feature_image = '';
+	/**
 	 * Post images url
 	 *
 	 * @var array
@@ -39,28 +45,34 @@ class Insert_Post {
 	private $is_featured = false;
 
 	/**
+	 * Post Array
+	 *
+	 * @var array
+	 */
+	private $postarr = array();
+
+	/**
 	 * Construct
 	 *
 	 * @param array $params
 	 */
 	public function __construct( $params ) {
-		$postarr = $this->process_params( $params );
-		$post_id = $this->insert( $postarr );
-
-		return $post_id;
+		$this->postarr = $this->process_params( $params );
 	}
 
 	/**
 	 * Insert Post
 	 *
-	 * @param array $postarr
 	 * @return integer
 	 */
-	public function insert( $postarr ) {
-		global $cp_options;
+	public function init() {
+		$postarr = $this->postarr;
 
 		// Check Insert post or update post
 		$post_id = wp_insert_post( $postarr );
+		if ( is_wp_error( $post_id ) ) {
+			return false;
+		}
 
 		// check featured post
 		if ( $this->is_featured ) {
@@ -72,39 +84,45 @@ class Insert_Post {
 			wp_set_post_terms( $post_id, $this->category, 'ad_cat', false );
 		}
 
+		// set feature_image
+		if ( $this->feature_image ) {
+			$image_id = $this->upload_image( $post_id, $this->feature_image, $postarr['post_title'] );
+			if ( $image_id ) {
+				update_post_meta( $post_id, '_cp_banner_image', absint( $image_id ) );
+				update_post_meta( $image_id, '_app_attachment_type', 'file' );
+			}
+		}
+
 		// set image.
 		if ( ! empty( $this->images ) ) {
-
 			$images = array();
 			foreach ( $this->images as $image_url ) {
-				$images[] = $this->upload_image( $post_id, $image_url, $postarr ['post_title'] );
-			}
-
-			// update in media classipress
-			update_post_meta( $post_id, '_cp_banner_image', absint( $images[0] ) );
-			update_post_meta( $post_id, '_app_media', $images );
-
-			if ( ! empty( $images ) ) {
-				foreach ( $images as $image_id ) {
+				$image_id = $this->upload_image( $post_id, $image_url, $postarr['post_title'] );
+				if ( $image_id ) {
+					$images[] = $image_id;
 					update_post_meta( $image_id, '_app_attachment_type', 'file' );
 				}
 			}
 
-			// update for isatis meta
-			$meta_value = array(
-				'count' => count( $images ),
-				'ids'   => $images,
-			);
-			update_post_meta( $post_id, '_isatis_ad_images', $meta_value );
+			if ( ! empty( $images ) ) {
+				update_post_meta( $post_id, '_cp_banner_image', absint( $images[0] ) );
+				update_post_meta( $post_id, '_app_media', $images );
+				$meta_value = array(
+					'count' => count( $images ),
+					'ids'   => $images,
+				);
+				update_post_meta( $post_id, '_isatis_ad_images', $meta_value );
+			}
 		}
 
 		// set 'cp_sys_expire_date'
 		$ad_length = get_post_meta( $post_id, 'cp_sys_ad_duration', true );
 		if ( empty( $ad_length ) ) {
-			$ad_length = $cp_options->prun_period;
+			$cp_options = get_option( 'cp_options' );
+			$ad_length  = $cp_options['prun_period'];
 		}
 
-		$ad_expire_date = appthemes_mysql_date( current_time( 'mysql' ), $ad_length );
+		$ad_expire_date = gmdate( 'Y-m-d H:i:s', strtotime( "+{$ad_length} days" ) );
 		update_post_meta( $post_id, 'cp_sys_expire_date', $ad_expire_date );
 
 		// update serach index
@@ -133,6 +151,17 @@ class Insert_Post {
 		if ( ! empty( $params['featured'] ) ) {
 			$this->is_featured = true;
 			unset( $params['featured'] );
+		}
+
+		// Check if the 'feature_image' parameter is not empty
+		if ( ! empty( $params['feature_image'] ) ) {
+			$feature_image = esc_url( $params['feature_image'] );
+
+			// We check if the image exists or not
+			$image_response = wp_remote_head( $feature_image );
+			if ( 200 === wp_remote_retrieve_response_code( $image_response ) ) {
+				$this->feature_image = $feature_image;
+			}
 		}
 
 		if ( ! empty( $params['images'] ) ) {
@@ -193,7 +222,6 @@ class Insert_Post {
 	 * @return void
 	 */
 	private function update_search_index( $post_id, $postarr ) {
-		global $wpdb;
 
 		$post        = get_post( $post_id );
 		$index_array = array();
@@ -232,6 +260,7 @@ class Insert_Post {
 
 		$index_string = implode( ', ', $index_array );
 
+		global $wpdb;
 		$wpdb->update( $wpdb->posts, array( 'post_content_filtered' => $index_string ), array( 'ID' => $post_id ) );
 
 	}

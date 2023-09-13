@@ -83,9 +83,32 @@ class Listing_Data {
 	 * @return array An array of image source URLs.
 	 */
 	public function get_images() {
+		$images = ISATIS_Images::get_ad_images( $this->post_id );
+
+		/**
+		 * Image id ha ro begir
+		 */
+		$images_src = array();
+		foreach ( $images as $id ) {
+			$image_src = wp_get_attachment_image_src( $id, 'full' );
+
+			if ( ! empty( $image_src ) ) {
+				$images_src[] = $image_src[0];
+			}
+		}
+
+		return $images_src;
+	}
+
+		/**
+	 * Retrieve the source URLs of the images associated with the post.
+	 *
+	 * @return array An array of image source URLs.
+	 */
+	public function get_feature_image() {
 		$image_id = ISATIS_Images::get_feature_image_id( $this->post_id );
 		if ( $image_id ) {
-			return ISATIS_Images::resize( $image_id );
+			return wp_get_attachment_image_src( $image_id, 'full' )[0];
 		}
 	}
 
@@ -114,7 +137,17 @@ class Listing_Data {
 				if ( 'checkbox' === $type || 'radio' === $type ) {
 					$output[ $meta_key ] = $meta_value;
 				} else {
-					$output[ $meta_key ] = Helper::convert_english_number( $meta_value[0] );
+					$meta_value = $meta_value[0];
+
+					if ( 'cp_price' === $meta_key ) {
+						$meta_value = '';
+					}
+
+					if ( is_numeric( $meta_value ) ) {
+						$meta_value = Helper::convert_english_number( $meta_value );
+					}
+
+					$output[ $meta_key ] = $meta_value;
 				}
 			}
 		}

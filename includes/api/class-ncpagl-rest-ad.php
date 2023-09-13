@@ -120,14 +120,15 @@ class NCPAGL_REST_AD extends WP_REST_Controller {
 		$post_data = new Listing_Data( $post_id );
 
 		return array(
-			'post_id'      => $post_id,
-			'author'       => $post_data->get_user(),
-			'post_title'   => get_the_title( $post_id ),
-			'post_content' => $post->post_content,
-			'category_id'  => $post_data->get_category(),
-			'featured'     => is_sticky( $post_id ),
-			'images'       => $post_data->get_images(),
-			'meta_input'   => $post_data->get_post_meta(),
+			'post_id'       => $post_id,
+			'author'        => $post_data->get_user(),
+			'post_title'    => get_the_title( $post_id ),
+			'post_content'  => $post->post_content,
+			'category_id'   => $post_data->get_category(),
+			'featured'      => is_sticky( $post_id ),
+			'feature_image' => $post_data->get_feature_image(),
+			// 'images'        => $post_data->get_images(),
+			'meta_input'    => $post_data->get_post_meta(),
 		);
 	}
 

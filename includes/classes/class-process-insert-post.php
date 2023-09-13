@@ -33,53 +33,44 @@ class Process_Insert_Post {
 			return;
 		}
 
-		$per_page = 3;
-		if ( ! empty( $_GET['per_page'] ) ) {
-			$per_page = absint( $_GET['per_page'] );
+		$response = wp_remote_get( 'https://www.fori.me/old/wp-json/ncpagl/v1/ads/' . get_option( 'ncpagl_last_postid' ) );
+		if ( is_wp_error( $response ) ) {
+			return;
 		}
 
-		$paged = get_option( 'ncpagl_paged ', 1 );
-		if ( ! empty( $_GET['paged'] ) ) {
-			$paged = absint( $_GET['paged'] );
-		}
+		$posts = json_decode( wp_remote_retrieve_body( $response ), true );
 
-		$posts = self::get_posts( $per_page, $paged );
-		$posts = wp_list_pluck( $posts, 'id' );
+		if ( $posts ) {
+			foreach ( $posts as $post_id ) {
+				$response = wp_remote_get( "https://www.fori.me/old/wp-json/ncpagl/v1/ad/{$post_id}" );
+				if ( ! is_wp_error( $response ) ) {
+					$result = json_decode( wp_remote_retrieve_body( $response ), true );
 
-		foreach ( $posts as $post_id ) {
-			$response = wp_remote_get( "https://www.fori.me/old/wp-json/ncpagl/v1/ad/{$post_id}" );
-			if ( ! is_wp_error( $response ) ) {
-				$result = json_decode( wp_remote_retrieve_body( $response ), true );
+					// Check User
+					$username = $result['author']['username'];
+					$usermeta = null;
+					if ( ! empty( $result['author']['usermeta'] ) ) {
+						$usermeta = $result['author']['usermeta'];
+					}
 
-				// Check User
-				$username = $result['author']['username'];
-				$usermeta = null;
-				if ( ! empty( $result['author']['usermeta'] ) ) {
-					$usermeta = $result['author']['usermeta'];
+					$user_id = self::get_user_id( $username, $usermeta );
+
+					// Insert Post
+					$result['post_status'] = 'publish';
+					$result['post_type']   = 'ad_listing';
+					$result['post_author'] = $user_id;
+
+					$inset_post = new Insert_Post( $result );
+					$listing_id = $inset_post->init();
+
+					if ( $listing_id ) {
+						update_option( 'ncpagl_last_postid', $post_id );
+					}
 				}
-
-				$user_id = self::get_user_id( $username, $usermeta );
-
-				// Insert Post
-				$result['post_status'] = 'publish';
-				$result['post_type']   = 'ad_listing';
-				$result['post_author'] = $user_id;
-
-				$post_id = new Insert_Post( $result );
-
 			}
 		}
 
-		update_option( 'ncpagl_paged', $paged + 1 );
-
-	}
-
-	private static function get_posts( $per_page, $paged ) {
-		$response = wp_remote_get( "https://www.fori.me/old/wp-json/ncpagl/v1/ads?per_page={$per_page}&paged={$paged}" );
-
-		if ( ! is_wp_error( $response ) ) {
-			return json_decode( wp_remote_retrieve_body( $response ), true );
-		}
+		exit;
 	}
 
 	/**
@@ -89,21 +80,22 @@ class Process_Insert_Post {
 	 */
 	public static function get_user_id( $username, $usermeta = array() ) {
 
-		$user_id = username_exists( $username );
+		$user = get_user_by( 'login', $username );
+		if ( $user ) {
+			return $user->ID;
+		}
 
-		if ( ! $user_id ) {
-			$userdata = array(
-				'user_login' => $username,
-				'user_pass'  => null,
-				'user_email' => self::create_email( $username ),
-			);
+		$userdata = array(
+			'user_login' => $username,
+			'user_pass'  => null,
+			'user_email' => self::create_email( $username ),
+		);
 
-			$user_id = wp_insert_user( $userdata );
+		$user_id = wp_insert_user( $userdata );
 
-			if ( ! is_wp_error( $user_id ) && ! empty( $usermeta ) ) {
-				foreach ( $usermeta as $meta_key => $meta_value ) {
-					update_user_meta( $user_id, $meta_key, $meta_value );
-				}
+		if ( ! is_wp_error( $user_id ) && ! empty( $usermeta ) ) {
+			foreach ( $usermeta as $meta_key => $meta_value ) {
+				update_user_meta( $user_id, $meta_key, $meta_value );
 			}
 		}
 
